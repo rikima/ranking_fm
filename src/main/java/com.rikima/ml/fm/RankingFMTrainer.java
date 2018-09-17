@@ -33,60 +33,56 @@ public class RankingFMTrainer {
     }
 
 
-    public double train(LabeledFeatureVector upper, LabeledFeatureVector lower) {
-        // TODO
-        double lambda = calcLambda(upper, lower);
-        //System.out.println("lambda " + lambda);
-        this.weightVector.updateForRanking(upper, lower, lambda, this.linearRegParam, this.quadraticRegParam,
-                this.linearUpdater, this.quadraticUpdater);
+  public double train(LabeledFeatureVector upper, LabeledFeatureVector lower) {
+    double lambda = calcLambda(upper, lower);
+    this.weightVector.updateForRanking(upper, lower, lambda, this.linearRegParam, this.quadraticRegParam,
+            this.linearUpdater, this.quadraticUpdater);
+    return logloss(upper, lower);
+  }
 
-        return logloss(upper, lower);
-    }
-
-    public double logloss(LabeledFeatureVector upper, LabeledFeatureVector lower) {
-        double upperScore = score(upper);
-        double lowerScore = score(lower);
-        double loss =  Math.log(1.0 + Math.exp(- (upperScore - lowerScore) ) );
-
-        return loss;
-    }
+  public double logloss(LabeledFeatureVector upper, LabeledFeatureVector lower) {
+    double upperScore = score(upper);
+    double lowerScore = score(lower);
+    double loss =  Math.log(1.0 + Math.exp(- (upperScore - lowerScore) ) );
+    return loss;
+  }
 
 
-    public double prob(FeatureVector fv) {
-        double score = this.score(fv);
-        return this.prob(score);
-    }
+  public double prob(FeatureVector fv) {
+    double score = this.score(fv);
+    return this.prob(score);
+  }
 
 
-    public double prob(double score) {
-        double p = 1.0 / (1 + Math.exp(-score));
-        return p;
-    }
+  public double prob(double score) {
+    double p = 1.0 / (1 + Math.exp(-score));
+    return p;
+  }
 
 
-    public double score(FeatureVector fv) {
-        double score = this.weightVector.wtx(fv);
-        return score;
-    }
+  public double score(FeatureVector fv) {
+    double score = this.weightVector.wtx(fv);
+    return score;
+  }
 
 
-    public double marginProb(double score, int y) {
-        double p = 1.0 / (1 + Math.exp(-y * score));
-        return p;
-    }
+  public double marginProb(double score, int y) {
+    double p = 1.0 / (1 + Math.exp(-y * score));
+    return p;
+  }
 
 
-    public double marginProb(LabeledFeatureVector lfv) {
-        double score = this.score(lfv);
-        return this.marginProb(score, lfv.y());
-    }
+  public double marginProb(LabeledFeatureVector lfv) {
+    double score = this.score(lfv);
+    return this.marginProb(score, lfv.y());
+  }
 
-    private double calcLambda(FeatureVector upper, FeatureVector lower) {
-        double upperScore = score(upper);
-        double lowerScore = score(lower);
+  private double calcLambda(FeatureVector upper, FeatureVector lower) {
+    double upperScore = score(upper);
+    double lowerScore = score(lower);
 
-        double lambda = -1.0 / (1.0 + Math.exp(upperScore - lowerScore) );
-        return lambda;
-    }
+    double lambda = -1.0 / (1.0 + Math.exp(upperScore - lowerScore) );
+    return lambda;
+  }
 
 }

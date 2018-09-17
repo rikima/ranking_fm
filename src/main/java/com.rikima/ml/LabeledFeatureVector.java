@@ -1,6 +1,7 @@
 package com.rikima.ml;
 
 import java.io.Serializable;
+import java.util.Set;
 import java.util.SortedSet;
 
 /**
@@ -25,12 +26,12 @@ public class LabeledFeatureVector extends FeatureVector implements Serializable 
   }
 
   public int y() {
-        return this.y;
-    }
+    return this.y;
+  }
 
   public String toString() {
-        return String.format("%d %s", this.y, super.toString());
-    }
+    return String.format("%d %s", this.y, super.toString());
+  }
 
   public void initGradientBuffer(int latentDimension) {
     this.latentDimension = latentDimension;
@@ -52,24 +53,88 @@ public class LabeledFeatureVector extends FeatureVector implements Serializable 
     }
   }
 
-  public void updateQuadracticGradient(int idx, int k, double value) {
-    try {
-      this.quadraticGradientBuffer[k + idx * latentDimension] += value;
-    } catch (Exception e) {
-      e.printStackTrace();
+  public void updateLinearGradient(int idx, double value) {
+    this.linearGradientBuffer[idx] += value;
+  }
+
+  public double getLinearGradient(int idx) {
+    return this.linearGradientBuffer[idx];
+  }
+
+  public void updateLinearGradients(double lambda,double linearRegParam,
+                                    float[] linearWeights, Set<Integer> indexBuffer) {
+    for (int i = 0; i < this.size(); ++i) {
+      int idx_i = this.findex(i);
+      double x_i = this.value(i);
+
+      double g = lambda * x_i;
+      if (!indexBuffer.contains(idx_i)) {
+        g += linearRegParam * linearWeights[idx_i];
+      }
+      this.updateLinearGradient(i, g);
     }
+  }
+
+  public void updateLinearWeights(float[] linearWeights, Updater linearUpdater) {
+    for (int i = 0; i < this.size(); ++i) {
+      int idx_i = this.findex(i);
+      double g = this.getLinearGradient(i);
+      double update = linearUpdater.getUpdate(idx_i, g);
+      linearWeights[idx_i] -= update;
+    }
+  }
+
+  public void updateQuadracticGradient(int idx, int k, double value) {
+    this.quadraticGradientBuffer[k + idx * latentDimension] += value;
   }
 
   public double getQudraticGradient(int idx, int k) {
     return this.quadraticGradientBuffer[k + idx * latentDimension];
   }
 
-  public void updateLinearGradient(int idx, double value) {
-        this.linearGradientBuffer[idx] += value;
+  public void updateQuadraticWeights(float[] quadraticWeights, Updater quadraticUpdater) {
+    for (int i = 0; i < this.size(); ++i) {
+      int idx_i = this.findex(i);
+      int start = idx_i * latentDimension;
+      for (int k = 0; k < this.latentDimension; ++k) {
+        double g = this.getQudraticGradient(i, k);
+        double update = quadraticUpdater.getUpdate(start+k, g);
+        quadraticWeights[start+k] -= update;
+      }
+    }
+  }
+
+  public void updateQuadraticGradients(double lambda, double quadraticRegParam, float[] quadraticWeights,
+                                       double[] buffer, Set<Integer> indexBuffer) {
+    for (int i = 0; i < buffer.length; ++i) {
+      buffer[i] = 0.0;
     }
 
-  public double getLinearGradient(int idx) {
-    return this.linearGradientBuffer[idx];
+    for (int i = 0; i < this.size(); ++i) {
+      int idx_i = this.findex(i);
+      double x_i = this.value(i);
+
+      int start = idx_i * latentDimension;
+      for (int k = 0; k < this.latentDimension; ++k) {
+        buffer[k] += x_i * quadraticWeights[start + k];
+      }
+    }
+
+    for (int i = 0; i < this.size(); ++i) {
+      int idx_i = this.findex(i);
+      double x_i = this.value(i);
+
+      int start = idx_i * latentDimension;
+      for (int k = 0; k < this.latentDimension; ++k) {
+        double g_x = lambda * (x_i * buffer[k] - x_i * x_i * quadraticWeights[start + k]);
+        double g = g_x;
+        if (!indexBuffer.contains(idx_i)) {
+          double g_r = quadraticRegParam * quadraticWeights[start + k];
+          g += g_r;
+        }
+        this.updateQuadracticGradient(i, k, g);
+      }
+    }
   }
 
   @Override

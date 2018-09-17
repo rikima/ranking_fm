@@ -120,144 +120,28 @@ public class FMWeightVector {
     upper.initGradientBuffer(latentDimension);
     lower.initGradientBuffer(latentDimension);
     this.indexBuffer.clear();
-    LabeledFeatureVector lfv = null;
 
     // bias term
     this.bias += 0;//coef; // TODO
 
     // linear term
     /* upper */
-    {
-      lfv = upper;
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        double x_i = lfv.value(i);
-
-        double g = lambda * x_i + linearRegParam * this.linearWeights[idx_i];
-        this.indexBuffer.add(idx_i);
-        lfv.updateLinearGradient(i, g);
-      }
-    }
-    /* lower */
-    {
-      lfv = lower;
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        double x_i = lfv.value(i);
-        double g = -lambda * x_i;
-        if (!this.indexBuffer.contains(idx_i)) {
-          g += linearRegParam * this.linearWeights[idx_i];
-        }
-        lfv.updateLinearGradient(i, g);
-      }
-    }
+    upper.updateLinearGradients(lambda, linearRegParam, this.linearWeights, indexBuffer);
+    lower.updateLinearGradients(-lambda, linearRegParam, this.linearWeights, indexBuffer);
 
     // quadratic term
-    /* upper */
-    {
-      lfv = upper;
-      this.clearBuffer();
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        double x_i = lfv.value(i);
-
-        int start = this.startIndex(idx_i);
-        for (int k = 0; k < this.latentDimension; ++k) {
-          buffer[k] += x_i * this.quadraticWeights[start + k];
-        }
-      }
-
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        double x_i = lfv.value(i);
-
-        int start = this.startIndex(idx_i);
-        for (int k = 0; k < this.latentDimension; ++k) {
-          double g_r = quadraticRegParam * this.quadraticWeights[start + k];
-          double g_x = lambda * (x_i * buffer[k] - x_i * x_i * this.quadraticWeights[start + k]);
-          double g = g_x + g_r;
-
-          lfv.updateQuadracticGradient(i, k, g);
-        }
-      }
-    }
-    /* lower */
-    {
-      lfv = lower;
-      this.clearBuffer();
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        double x_i = lfv.value(i);
-
-        int start = this.startIndex(idx_i);
-        for (int k = 0; k < this.latentDimension; ++k) {
-          buffer[k] += x_i * this.quadraticWeights[start + k];
-        }
-      }
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        double x_i = lfv.value(i);
-
-        int start = this.startIndex(idx_i);
-        for (int k = 0; k < this.latentDimension; ++k) {
-          double g_x = -lambda * (x_i * buffer[k] - x_i * x_i * this.quadraticWeights[start + k]);
-          double g = g_x;
-          if (!this.indexBuffer.contains(idx_i)) {
-            double g_r = quadraticRegParam * this.quadraticWeights[start + k];
-            g += g_r;
-          }
-
-          lfv.updateQuadracticGradient(i, k, g);
-        }
-      }
-    }
+    upper.updateQuadraticGradients(lambda, quadraticRegParam, this.quadraticWeights, buffer, indexBuffer);
+    lower.updateQuadraticGradients(-lambda, quadraticRegParam, quadraticWeights, buffer, indexBuffer);
 
     // update via adagrad
     // linear
-    {
-      lfv = upper;
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        double g = lfv.getLinearGradient(i);
-        double update = linearUpdater.getUpdate(idx_i, g);
-        this.linearWeights[idx_i] -= update;
-      }
-
-      lfv = lower;
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        double g = lfv.getLinearGradient(i);
-        double update = linearUpdater.getUpdate(idx_i, g);
-        this.linearWeights[idx_i] -= update;
-      }
-    }
+    upper.updateLinearWeights(this.linearWeights, linearUpdater);
+    lower.updateLinearWeights(this.linearWeights, linearUpdater);
 
     // quadratic
-    {
-      lfv = upper;
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        int start = this.startIndex(idx_i);
-        for (int k = 0; k < this.latentDimension; ++k) {
-          double g = lfv.getQudraticGradient(i, k);
-          double update = quadraticUpdater.getUpdate(start+k, g);
-          this.quadraticWeights[start+k] -= update;
-        }
-      }
-
-      lfv = lower;
-      for (int i = 0; i < lfv.size(); ++i) {
-        int idx_i = lfv.findex(i);
-        int start = this.startIndex(idx_i);
-        for (int k = 0; k < this.latentDimension; ++k) {
-          double g = lfv.getQudraticGradient(i, k);
-          double update = quadraticUpdater.getUpdate(start+k, g);
-          this.quadraticWeights[start+k] -= update;
-        }
-      }
-    }
+    upper.updateQuadraticWeights(this.quadraticWeights, quadraticUpdater);
+    lower.updateQuadraticWeights(this.quadraticWeights, quadraticUpdater);
   }
-
 
   /**
    * update for usual FM
@@ -326,10 +210,9 @@ public class FMWeightVector {
     }
   }
 
-
   private int startIndex(int featureIndex) {
-        return featureIndex * latentDimension;
-    }
+    return featureIndex * latentDimension;
+  }
 
   private void clearBuffer() {
     for (int k = 0; k < latentDimension; ++k) {
